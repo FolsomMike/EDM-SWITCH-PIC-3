@@ -1,78 +1,19 @@
 ;--------------------------------------------------------------------------------------------------
-; Project:  OPT EDM Notch Cutter -- LCD PIC software Model 3
-; Date:     2/06/16
+; Project:  EDM Notch Cutter -- SWITCH PIC software Model 3
+; Date:     02/10/16
 ; Revision: 1.0
 ;
-; This code is for the LCD controller PIC on the EDM Notch Cutter User Interface Board.
+; This code is for the switch and button relay PIC on the EDM Notch Cutter User Interface Board.
 ;
 ; Overview:
 ;
-; This program reads serial data sent by the Main PIC and displays it on the LCD. All data is
-; first stored in a local buffer which is then repeatedly transmitted to the LCD display. This
-; constant refreshing corrects errors which occur in the displayed text due to electrical noise
-; from the cutting current causing spikes in the LCD display control lines.
+; This program listens for state changes of switches and buttons. The button and switch states are
+; stored locally on this device and repeatedly transmitted to the Main PIC as serial data.
 ;
-;--------------------------------------------------------------------------------------------------
+; If a switch or button state changes, the change will be stored in a temporary buffer until the
+; previous state of the switch or button has been properly sent to the Main PIC. This ensures that
+; rapid button presses and quick flipping of a switch up and down is transmitted to the Main PIC.
 ;
-; Revision History:
-;
-; 1.0   Code base copied from "OPT EDM LCD PIC" code.
-;
-;--------------------------------------------------------------------------------------------------
-;
-;--------------------------------------------------------------------------------------------------
-; LCD Notes for the OPT EDM Control Board I
-;
-; Optrex C-51847NFJ-SLW-ADN 20 characters by 4 lines
-;
-; The user manual specified for this display is Dmcman_full-user manual.pdf from www.optrex.com
-; This manual does not list this exact part number, but seems to be the appropriate manual.
-;
-; The R/W line on pin RA4 is driven low to write to the LCD, high to read.
-;
-; The E line is used to strobe the read/write operations.
-;
-; Addressing ---
-;
-; LCD ADDRESSING NOTE: LCD addressing is screwy - the lines are not in sequential order:
-;
-; line 1 column 1 = 0x80  	(actually address 0x00)
-; line 2 column 1 = 0xc0	(actually address 0x40)
-; line 3 column 1 = 0x94	(actually address 0x14)
-; line 4 column 1 = 0xd4	(actually address 0x54)
-;
-; To address the second column in each line, use 81, C1, 95, d5, etc.
-;
-; The two different columns of values listed above are due to the fact that the address
-; is in bits 6:0 and control bit 7 must be set to signal that the byte is an address
-; byte.  Thus, 0x00 byte with the control bit set is 0x80.  The 0x80 value is what is
-; actually sent to the LCD to set address 0x00.
-;
-;  Line 3 is actually the continuation in memory at the end of line 1
-;    (0x94 - 0x80 = 0x14 which is 20 decimal -- the character width of the display)
-;  Line 4 is a similar extension of line 2.
-;
-; Note that the user manual offered by Optrex shows the line addresses
-; for 20 character wide displays at the bottom of page 20.
-;
-; The LCD Data Buffer in the PIC
-;
-; The LCD's buffer is mirrored in a buffer in the PIC. This allows the LCD to be constantly
-; refreshed from the PIC buffer to correct errors. The PIC LCD buffer is a contiguous block of
-; memory, unlike the LCD's which has a chopped up address spacing (see above for details).
-; Function(s) are included in this program for finding the PIC buffer position which corresponds
-; to a specified LCD screen address.
-; 
-; Cursor and Blinking ---
-;
-; The display has the capability to display a cursor and/or blink the character at the cursor
-; location. This is not used in this program. Since the screen is refreshed by redrawing
-; constantly, the cursor or blinking is seen racing across the screen as it follows each character
-; written. It was too complicated to turn it off during refresh, then delay long enough for it
-; to be seen after turning it back on.
-;
-; Instead, blinking is handled in the PIC code by replacing the character to be blinked by a
-; space when it is transmitted.
 ;
 ;--------------------------------------------------------------------------------------------------
 ; Notes on PCLATH
@@ -80,11 +21,8 @@
 ; The program counter (PC) is 13 bits. The lower 8 bits can be read and written as register PCL.
 ; The upper bits cannot be directly read or written.
 ;
-; When a goto is executed, 11 bits embedded into the goto instruction are loaded into the PC<10:0>
-; while bits PCLATH<4:3> are copied to bits PC<12:11>
-;
 ; When a goto is executed, 11 bits embedded into the goto instruction are loaded into the lower
-; 11 bits of PC while bits PCLATH<4:3> are copied to bits PC<12:11>
+; 11 bits of PC<10:0> while bits PCLATH<4:3> are copied to bits PC<12:11>
 ;
 ; Changing PCLATH does NOT instantly change the PC register. The PCLATH will be used the next time
 ; a goto is executed (or similar opcode) or the PCL register is written to. Thus, to jump farther
