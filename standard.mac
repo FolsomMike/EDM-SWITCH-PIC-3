@@ -1,0 +1,80 @@
+;--------------------------------------------------------------------------------------------------
+; MKSystems / Curt Irvin
+;
+; Project:  Macros for all PIC projects
+; Date:     4/21/01
+; Authors:  Mike Schoonover, Curt Irvin
+; Revision: 1.0
+;
+; Overview:
+;
+; These macros are useful for most PIC software projects.
+;
+;
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; PUSH_MACRO
+;
+; Stores W, STATUS, PCLATH, and FSR registers in W_TEMP, STATUS_TEMP, PCLATH_TEMP, and FSR_TEMP
+; registers.
+;
+; NOTES:
+;
+; W_TEMP, STATUS_TEMP, PCLATH_TEMP and FSR_TEMP registers must be defined by the main program file
+; in the register area common to all four data memory banks (0x70 to 0x7f for the PIC16F876).
+;
+; This macro should only be used for PICs with common register areas in all 4 memory banks.  See
+; MicroChip reference manuals for creating a macro for other PICs.
+;
+
+
+PUSH_MACRO MACRO
+
+	movwf   W_TEMP                  ; copy W to a temporary register
+                                        ; regardless of current bank
+	swapf   STATUS,W                ; swap STATUS nibbles and place into W register
+                                        ; (swap is used because it does not affect any status
+                                        ; bits - problematic when trying to save the status
+                                        ; register itself - must be swapped again to restore)
+	movwf   STATUS_TEMP             ; save STATUS to a temporary register
+
+	movf    PCLATH,W                ; store PCLATH
+	movwf   PCLATH_TEMP
+
+	movf	FSR,W			; store FSR
+	movwf	FSR_TEMP
+
+	ENDM                            ; end this macro
+
+;end of PUSH_MACRO
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; POP_MACRO
+;
+; Restores W, STATUS, PCLATH, and FSR registers from W_TEMP, STATUS_TEMP, PCLATH_TEMP and FSR_TEMP
+; registers.
+;
+; See PUSH_MACRO for more information.
+;
+
+POP_MACRO MACRO
+
+	movf	FSR_TEMP,W		; restore FSR
+	movwf	FSR
+
+	movf    PCLATH_TEMP,W           ; restore PCLATH
+	movwf   PCLATH
+
+	swapf   STATUS_TEMP,W           ; swap original STATUS register value into W
+	movwf   STATUS                  ; restore the STATUS register
+
+	swapf   W_TEMP,F                ; swap W_Temp nibbles (temporarily)
+	swapf   W_TEMP,W                ; swap again and move to W to restore original
+                                        ; (use swap to avoid affecting STATUS bits)
+
+	ENDM                            ; end this macro
+
+;end of POP_MACRO
+;--------------------------------------------------------------------------------------------------
