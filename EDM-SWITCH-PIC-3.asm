@@ -218,10 +218,10 @@ inDelay         EQU     0x04    ; bit 4: 0 = not delaying           1 = delaying
 
     xmtScratch0             ; scratch pad variable
 
-    xmtBitCount             ; tracks bits of byte being transmitted to LCD
+    xmtBitCount             ; tracks bits of byte being transmitted on serial out port
     xmtBufferCnt            ; number of characters in the buffer
     
-    xmtBufferPtrH           ; points to next byte in buffer to be transmitted to LCD 
+    xmtBufferPtrH           ; points to next byte in buffer to be transmitted
     xmtBufferPtrL
     
     xmtDelay1               ; delay counter for providing necessary time delay between characters
@@ -305,14 +305,7 @@ setup:
 
     call    setupPortA
 
-;    banksel LCD_RW_RS_L
-;    bcf		LCD_RW_RS_L,LCD_RW  ; set LCD R/W low to select write to LCD mode
-;    bcf		LCD_RW_RS_L,LCD_RS	; set LCD Register Select low (chooses instruction register)
-
     call    setupPortB
-
-;    banksel LCD_E_L
-; 	bcf		LCD_E_L,LCD_E       ; set LCD E strobe low (inactive)
 
     call    setupPortC
 
@@ -480,8 +473,6 @@ setupPortB:
 ; NOTE: Writing to PORTC is same as writing to LATC for PIC16f1459. The code example from the
 ; data manual writes to both on initialization -- probably to be compatible with other PIC chips.
 ;
-; For this program, PortC is the LCD data bus.
-;
 
 setupPortC:
 
@@ -528,30 +519,211 @@ setupPortC:
 ;--------------------------------------------------------------------------------------------------
 ; Main Code
 ;
-; Sets up the PIC, the LCD, displays a greeting, then monitors the serial data input line from
-; the main PIC for data and instructions to be passed on to the LCD display.
-;
 
 start:
 
 	call	setup			; set up main variables and hardware
 
+    banksel switchStates
+    movlw   0xff            ; initialize switchStates -> no inputs active
+    movwf   switchStates
+
 mainLoop:
 
-    banksel flags
+    call    trapSwitchInputs    ; check each switch input and store flag for any which are active
+
+    call    handleOutputs       ; debug mks -- only do this when new byte received
+
+    banksel xmtFlags            ; when the xmt buffer is empty, send the switch states again
+    btfss   xmtFlags,xmtBusy
+    call    sendSwitchStates
 
     goto    mainLoop
 
 ; end of Main Code
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; trapSwitchInputs
+;
+; Checks each switch input and sets the associated flag for each if it is active.
+;
+
+trapSwitchInputs:
+
+
+    banksel MODE_JOGUP_SEL_EPWR_P
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,MODE_SW
+    bcf     switchStates,MODE_SW_FLAG
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW
+    bcf     switchStates,JOG_UP_SW_FLAG
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,SELECT_SW
+    bcf     switchStates,SELECT_SW_FLAG
+
+    btfsc   MODE_JOGUP_SEL_EPWR_P,ELECTRODE_PWR_SW  ;debug mks -- this switch high if on?
+    bcf     switchStates,ELECTRODE_PWR_SW_FLAG
+
+    banksel JOGDWN_P
+
+    btfss   JOGDWN_P,JOG_DOWN_SW
+    bcf     switchStates,JOG_DOWN_SW_FLAG
+
+    return
+
+; end of trapSwitchInputs
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; handleOutputs
+;
+; Sets outputs to the state specified by the Main PIC.
+;
+
+handleOutputs:
 
 
 
 
+    return
 
+; end of handleOutputs
+;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; sendSwitchStates
+;
+; Stores the current switchStates value in the serial data xmt buffer and flushes the buffer so it
+; will be sent.
+;
+; Resets switchStates to inactive states so it is ready to trap new inputs.
+;
 
+sendSwitchStates:
+
+    banksel switchStates
+    movf    switchStates,W
+    call    writeByteXMT
+
+    call    flushXMT        ; trigger buffer send
+
+    banksel switchStates
+    movlw   0xff            ; initialize switchStates -> no inputs active
+    movwf   switchStates
+
+    return
+
+; end of sendSwitchStates
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; writeByteXMT
+;
+; This subroutine writes the byte in W to the serial data transmit buffer.
+;
+; On entry:
+; 
+; W contains byte to write
+;
+; NOTE: The data is placed in the print buffer but is not submitted to be printed.  After using
+; this function, call flushXMT to flush the buffer.
+;
+
+writeByteXMT:
+
+    banksel xmtScratch0
+
+    movwf   xmtScratch0         ; store character
+
+    movf    xmtBufferPtrH,W     ; get pointer to next buffer position
+    movwf   FSR0H
+    movf    xmtBufferPtrL,W
+    movwf   FSR0L
+
+    movf    xmtScratch0,W       ; retrieve character
+
+    movwf   INDF0               ; store character in buffer
+
+    incf    xmtBufferCnt,F      ; count characters placed in the buffer
+
+    incf    xmtBufferPtrL,F     ; point to next character in buffer
+    btfsc   STATUS,Z            ;  (less code than storing pointer)
+    incf    xmtBufferPtrH,F
+    
+    banksel flags
+
+    return    
+
+; end of writeByteXMT
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; flushXMT
+;
+; Forces the data in the serial data transmit buffer to start transmission.
+;
+
+flushXMT:
+
+; prepare the interrupt routine for printing
+
+    banksel xmtBuffer0
+
+    movlw   high xmtBuffer0     ; reset pointer to beginning of the buffer
+    movwf   xmtBufferPtrH
+    movlw   low xmtBuffer0
+    movwf   xmtBufferPtrL    
+    
+    bsf     xmtFlags,startBit
+    bsf     xmtFlags,xmtBusy    ; set this bit last to make sure everything set up before interrupt
+
+    banksel flags
+
+    return
+
+; end of flushXMT
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; waitXMT
+;
+; Waits until the serial data transmit buffer has been transmitted and is ready for more data.
+;
+
+waitXMT:
+
+    banksel xmtFlags
+
+loopWBL1:                   ; loop until interrupt routine finished writing character
+
+    btfsc   xmtFlags,xmtBusy
+    goto    loopWBL1
+
+    banksel flags
+
+    return
+
+; end of waitXMT
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; flushAndWaitXMT
+;
+; Forces the data in the serial data transmit buffer to start transmission and then waits until the
+; buffer has been transmitted and is ready for more data.
+;
+
+flushAndWaitXMT:
+
+    call    flushXMT
+    call    waitXMT   
+
+    return
+
+; end of flushAndWaitXMT
+;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
 ; handleTimer0Interrupt
@@ -576,7 +748,7 @@ handleTimer0Interrupt:
 
 	bcf 	INTCON,T0IF         ; clear the Timer0 overflow interrupt flag
 
-    banksel xmtFlags            ; select data bank 1 to access LCD buffer variables
+    banksel xmtFlags
 
     btfss   xmtFlags,xmtBusy    
     goto    endISR              ; if nothing in buffer, exit
@@ -597,7 +769,7 @@ handleTimer0Interrupt:
     btfss   xmtFlags,endBuffer  ; buffer empty?
     goto    endISR
 
-    clrf    xmtFlags            ; if end of buffer reached, set LCD not busy
+    clrf    xmtFlags            ; if end of buffer reached, set XMT not busy
     movlw   high xmtBuffer0     ; reset pointer to beginning of the buffer
     movwf   xmtBufferPtrH
     movlw   low xmtBuffer0
