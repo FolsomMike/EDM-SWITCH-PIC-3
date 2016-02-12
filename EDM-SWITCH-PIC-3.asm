@@ -121,15 +121,15 @@
 ;--------------------------------------------------------------------------------------------------
 ; Configurations, etc. for the Assembler Tools and the PIC
 
-LIST p = PIC16F1459	;select the processor
+    LIST p = PIC16F1459	;select the processor
 
-errorlevel  -306 ; Suppresses Message[306] Crossing page boundary -- ensure page bits are set.
+    errorlevel  -306 ; Suppresses Message[306] Crossing page boundary -- ensure page bits are set.
 
-errorLevel  -302 ; Suppresses Message[302] Register in operand not in bank 0.
+    errorLevel  -302 ; Suppresses Message[302] Register in operand not in bank 0.
 
-errorLevel	-202 ; Suppresses Message[205] Argument out of range. Least significant bits used.
-                 ;	(this is displayed when a RAM address above bank 1 is used -- it is
-                 ;	 expected that the lower bits will be used as the lower address bits)
+    errorLevel	-202 ; Suppresses Message[205] Argument out of range. Least significant bits used.
+                     ;	(this is displayed when a RAM address above bank 1 is used -- it is
+                     ;	 expected that the lower bits will be used as the lower address bits)
 
 
 #INCLUDE <p16f1459.inc> 		; Microchip Device Header File
@@ -221,7 +221,7 @@ inDelay         EQU     0x04    ; bit 4: 0 = not delaying           1 = delaying
 ;----------------------
 ; Bank 0 -- 80 bytes
 
-cblock 0x20                 ; starting address
+    cblock 0x20                 ; starting address
 
     flags                   ; bit 0: unused
                             ; bit 1: 0 = char at cursor is off : 1 = char at cursor is on
@@ -255,7 +255,7 @@ cblock 0x20                 ; starting address
 
 	; end of variables ONLY written to by interrupt code
 
-endc 
+    endc 
     
 ; end of Bank 0
 ;----------------------
@@ -308,9 +308,9 @@ endc
 ;	70h-7fh		f0h-ffh		170h-17fh	1f0h-1ffh
 ;
 
-cblock	0x70
+    cblock	0x70
 
-endc
+    endc
 
 ;-----------------
 
@@ -327,7 +327,7 @@ endc
 ;   interrupt.
 ;
 
-org 0x00                    ; Start of Program Memory
+    org 0x00                    ; Start of Program Memory
 
 	goto start              ; jump to main code section
 	nop			            ; Pad out so interrupt
