@@ -106,26 +106,43 @@
 ; The compiler replaces all occurences of the constants defined below with their proper values.
 ;
  
-; Constants for serial data
+; Serial Data I/O
 
-SERIAL_IN_P             EQU     PORTA   ; PORTA - used to receive serial data from main
-SERIAL_IN               EQU     RA0     ; RA0   - used to receive serial data from main
+SERIAL_IN_P             EQU     PORTA   ; PORTA - used to receive serial data
+SERIAL_IN               EQU     RA0     ; RA0   - used to receive serial data
            
-SERIAL_OUT_L            EQU     LATB    ; LATB - used to send serial data to main
-SERIAL_OUT               EQU     RB7    ; RB7   - used to send serial data to main
+SERIAL_OUT_L            EQU     LATB    ; LATB - used to send serial data
+SERIAL_OUT              EQU     RB7     ; RB7   - used to send serial data
 
-; end of Constants for serial data
+; Indicator Outputs
+
+INDICATORS_OUT_L        EQU     LATC
+
+AC_OK_LED               EQU     RC0
+BUZZER                  EQU     RC3
+SHORT_LED               EQU     RC6
 
 ; Switches
 
-PORT_SWITCHES           EQU     PORTC   ; PORTC - port used to listen to all switches
+MODE_JOGUP_SEL_EPWR_P   EQU     PORTC
+JOGDWN_P                EQU     PORTB
 
-SWITCH_SELECT           EQU		RC7     ; RC7 pin listens to the Select switch
-SWITCH_SELECT_STATE     EQU     0       ; Select switch state is bit 0 of switchStates in ram
+MODE_SW                 EQU     RC1
+JOG_UP_SW               EQU     RC2
+SELECT_SW               EQU		RC7
+ELECTRODE_PWR_SW        EQU     RC4
+JOG_DOWN_SW             EQU     RB5
 
-; end of Switches
+
+;bits in switchStates variable
+
+MODE_SW_FLAG            EQU     0
+JOG_UP_SW_FLAG          EQU     1
+SELECT_SW_FLAG          EQU     2
+ELECTRODE_PWR_SW_FLAG   EQU     3
+JOG_DOWN_SW_FLAG        EQU     4
      
-; Bits in xmtBufferFlags
+; bits in xmtBufferFlags
 
 xmtBusy         EQU     0x00    ; bit 0: 0 = buffer not busy        1 = buffer busy
 startBit        EQU     0x01    ; bit 1: 0 = start bit not due      1 = transmit start bit next
@@ -133,7 +150,7 @@ stopBit         EQU     0x02    ; bit 2: 0 = stop bit not due       1 = transmit
 endBuffer       EQU     0x03    ; bit 3: 0 = not buffer end         1 = buffer end reached
 inDelay         EQU     0x04    ; bit 4: 0 = not delaying           1 = delaying
 
-; end of Bits in xmtBufferFlags
+; end of bits in xmtBufferFlags
 
 ; end of Constants
 ;--------------------------------------------------------------------------------------------------
@@ -160,12 +177,12 @@ inDelay         EQU     0x04    ; bit 4: 0 = not delaying           1 = delaying
 							; bit 6:
 							; bit 7:
                             
-    switchPresses           ; All bits set if no buttons pressed (11111111b)
-                            ; bit 0: 0 = Select/Reset/Zero/Enter switch pressed
-                            ; bit 1:
-                            ; bit 2:
-                            ; bit 3:
-                            ; bit 4:
+    switchStates            ; All bits set if no buttons pressed (11111111b)
+                            ; bit 0: 0 = Mode switch active
+                            ; bit 1: 0 = Jog Up switch active
+                            ; bit 2: 0 = Select switch active
+                            ; bit 3: 0 = Electrode Power switch active
+                            ; bit 4: 0 = Jog Down switch active
                             ; bit 5:
 							; bit 6:
 							; bit 7:
@@ -403,11 +420,7 @@ setupPortA:
 
     ; set direction for each pin used
 
-;debug mks -- change these
-;    bsf     TRISA, SERIAL_IN            ; input
-;    bcf     TRISA, LCD_RW               ; output
-;    bcf     TRISA, LCD_RS               ; output
-;    bsf     TRISA, RA1                  ; input - unused - pulled up via external resistor
+    bsf     TRISA, SERIAL_IN            ; input
 
     return
 
@@ -436,9 +449,6 @@ setupPortB:
 
     banksel LATB                        ; init port data latch
     clrf    LATB
-
-    banksel SERIAL_OUT_L
-    bsf     SERIAL_OUT_L,SERIAL_OUT     ; initialize SERIAL_OUT high before changing pin to output
                                         ; so a start bit won't be transmitted
     banksel ANSELB
     clrf    ANSELB                      ; setup port for all digital I/O
@@ -449,11 +459,13 @@ setupPortB:
     movlw   b'11111111'                 ; first set all to inputs
     movwf   TRISB
 
+    banksel SERIAL_OUT_L
+    bsf     SERIAL_OUT_L,SERIAL_OUT     ; initialize SERIAL_OUT high before changing pin to output
+
     ; set direction for each pin used
 
-; debug mks -- change these
-;    bcf     TRISB, SERIAL_OUT           ; output
-;    bcf     TRISB, LCD_E                ; output
+    bcf     TRISB, SERIAL_OUT           ; output
+    bsf     TRISB, JOG_DOWN_SW          ; input
 
     return
 
@@ -487,8 +499,26 @@ setupPortC:
     ; set I/O directions
 
     banksel TRISC
-    movlw   b'00000000'                 ; set all to outputs
+    movlw   b'11111111'                 ; set all to inputs
     movwf   TRISC
+
+    ;preset outputs before enabling
+
+    banksel INDICATORS_OUT_L
+    bsf     INDICATORS_OUT_L,AC_OK_LED  ; turn off LED
+    bsf     INDICATORS_OUT_L,BUZZER     ; turn off buzzer
+    bsf     INDICATORS_OUT_L,SHORT_LED  ; turn off LED
+
+    ; set direction for each pin used
+
+    bsf     TRISC, MODE_SW              ; input
+    bsf     TRISC, JOG_UP_SW            ; input
+    bsf     TRISC, SELECT_SW            ; input
+    bsf     TRISC, ELECTRODE_PWR_SW     ; input
+
+    bcf     TRISC, AC_OK_LED            ; output
+    bcf     TRISC, BUZZER               ; output
+    bcf     TRISC, SHORT_LED            ; output
 
     return
 
