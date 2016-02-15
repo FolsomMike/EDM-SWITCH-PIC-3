@@ -366,7 +366,7 @@ LCD_INSTRUCTION_CMD         EQU .5
     clrf    PCLATH          ; set to bank 0 where the ISR is located
     goto 	handleInterrupt	; points to interrupt service routine
 
-; end of Reset Vectors
+; end of Power On and Reset Vectors
 ;--------------------------------------------------------------------------------------------------
 
 ; end of Reset & Interrupt Vectors
@@ -687,13 +687,12 @@ trapSwitchInputs:
 ;
 ; Sets outputs to the state specified in the serial receive buffer.
 ;
+; On Entry:
+;
+;   FSR0 points to serialRcvBuf
+; 
 
 setOutputs:
-
-    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
-    movwf   FSR0H
-    movlw   serialRcvBuf
-    movwf   FSR0L
 
     moviw   1[FSR0]                     ; get the switch state value from the packet
 
@@ -819,7 +818,7 @@ handleSerialPacket:
 
     movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
     movwf   FSR0H
-    movlw   serialRcvBuf
+    movlw   low serialRcvBuf
     movwf   FSR0L
 
     clrw                                ; preload W with zero
@@ -850,19 +849,28 @@ hspError:
 ;
 ; Parses the command byte in a serial packet and performs the appropriate action.
 ;
+; On Entry:
+;
+; On Exit:
+;
+; FSR0 points to serialRcvBuf
+;
 
 parseCommandFromSerialPacket:
 
-    banksel serialRcvBuf
+    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
+    movwf   FSR0H
+    movlw   low serialRcvBuf
+    movwf   FSR0L
 
 ; parse the command byte by comparing with each command
 
-    movf    serialRcvBuf, W
+    movf    INDF0, W
     sublw   SET_OUTPUTS_CMD
     btfsc   STATUS,Z
     goto    setOutputs
 
-;    movf    serialRcvBuf, W
+;    movf    INDF0, W
 ;    sublw   ???_CMD
 ;    btfsc   STATUS,Z
 ;    goto    handleSetPotRbtCmd
