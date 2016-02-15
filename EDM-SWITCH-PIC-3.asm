@@ -42,7 +42,7 @@
 ;
 ; Port A        Pin/Options/Selected Option/Description  (only the most common options are listed)
 ;
-; RA0   I/*,IOC,USB-D+                  ~ I ~ Jog Down switch input         -- debug mks -- fix define for this
+; RA0   I/*,IOC,USB-D+                  ~ I ~ Jog Down switch input
 ; RA1   I/*,IOC,USB-D-                  ~ unused -- pulled high externally
 ; RA2   not implemented in PIC16f1459   ~ 
 ; RA3   I/*,IOC,T1G,MSSP-SS,Vpp,MCLR    ~ Vpp
@@ -146,14 +146,6 @@
 ;
 ; The compiler replaces all occurences of the constants defined below with their proper values.
 ;
- 
-; Serial Data I/O
-
-SERIAL_IN_P             EQU     PORTA   ; PORTA - used to receive serial data
-SERIAL_IN               EQU     RA0     ; RA0   - used to receive serial data
-           
-SERIAL_OUT_L            EQU     LATB    ; LATB - used to send serial data
-SERIAL_OUT              EQU     RB7     ; RB7   - used to send serial data
 
 ; Indicator Outputs
 
@@ -166,14 +158,13 @@ SHORT_LED               EQU     RC6
 ; Switches
 
 MODE_JOGUP_SEL_EPWR_P   EQU     PORTC
-JOGDWN_P                EQU     PORTB
+JOGDWN_P                EQU     PORTA
 
 MODE_SW                 EQU     RC1
 JOG_UP_SW               EQU     RC2
 SELECT_SW               EQU		RC7
 ELECTRODE_PWR_SW        EQU     RC4
-JOG_DOWN_SW             EQU     RB5
-
+JOG_DOWN_SW             EQU     RA0
 
 ;bits in switchStates variable
 
@@ -480,7 +471,7 @@ setupPortA:
 
     ; set direction for each pin used
 
-    bsf     TRISA, SERIAL_IN            ; input
+    bsf     TRISA, JOG_DOWN_SW            ; input
 
     return
 
@@ -519,13 +510,9 @@ setupPortB:
     movlw   b'11111111'                 ; first set all to inputs
     movwf   TRISB
 
-    banksel SERIAL_OUT_L
-    bsf     SERIAL_OUT_L,SERIAL_OUT     ; initialize SERIAL_OUT high before changing pin to output
-
     ; set direction for each pin used
-
-    bcf     TRISB, SERIAL_OUT           ; output
-    bsf     TRISB, JOG_DOWN_SW          ; input
+    
+    ; (no changes required)
 
     return
 
@@ -944,7 +931,7 @@ cSPXBLoop:
 ;--------------------------------------------------------------------------------------------------
 ; setupSerialPort
 ;
-; Sets up the serial port for communication with the Rabbit micro-controller.
+; Sets up the serial port for communication.
 ; Also prepares the receive and transmit buffers for use.
 ;
 
