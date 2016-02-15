@@ -173,6 +173,12 @@ JOG_UP_SW_FLAG          EQU     1
 SELECT_SW_FLAG          EQU     2
 ELECTRODE_PWR_SW_FLAG   EQU     3
 JOG_DOWN_SW_FLAG        EQU     4
+
+;bits in outputStates variable
+
+AC_OK_LED_FLAG          EQU     0
+BUZZER_FLAG             EQU     1
+SHORT_LED_FLAG          EQU     2
      
 ; bits in xmtBufferFlags
 
@@ -259,12 +265,22 @@ LCD_INSTRUCTION_CMD         EQU .5
 							; bit 6: 0 =
 							; bit 7: 0 =
                         
-    switchStates            ; All bits set if no buttons pressed (11111111b)
+    switchStates            ; all bits set if no buttons pressed (1111 1111b)
                             ; bit 0: 0 = Mode switch active
                             ; bit 1: 0 = Jog Up switch active
                             ; bit 2: 0 = Select switch active
                             ; bit 3: 0 = Electrode Power switch active
                             ; bit 4: 0 = Jog Down switch active
+                            ; bit 5:
+							; bit 6:
+							; bit 7:
+
+    outputStates            ; all bits set if no buttons pressed (1111 1111b)
+                            ; bit 0: 0 = AC OK LED lit
+                            ; bit 1: 0 = Buzzer on
+                            ; bit 2: 0 = Short Condition LED lit
+                            ; bit 3: 0 = 
+                            ; bit 4: 0 = 
                             ; bit 5:
 							; bit 6:
 							; bit 7:
@@ -390,8 +406,15 @@ setup:
                             ; bit 0 = 0 :
 
     banksel flags
-
 	clrf   	flags
+
+    banksel switchStates
+    movlw   0xff            ; initialize switchStates -> no inputs active
+    movwf   switchStates
+
+    banksel outputStates
+    movlw   0xff            ; initialize outputStates -> no outputs active
+    movwf   outputStates
 
 ; enable the interrupts
 
@@ -578,10 +601,6 @@ start:
 
 	call	setup			; set up main variables and hardware
 
-    banksel switchStates
-    movlw   0xff            ; initialize switchStates -> no inputs active
-    movwf   switchStates
-
 mainLoop:
 
     call    trapSwitchInputs    ; check each switch input and store flag for any which are active
@@ -671,7 +690,61 @@ trapSwitchInputs:
 
 setOutputs:
 
+    movlw   high serialRcvBuf           ; point FSR0 at start of receive buffer
+    movwf   FSR0H
+    movlw   serialRcvBuf
+    movwf   FSR0L
 
+    moviw   1[FSR0]                     ; get the switch state value from the packet
+
+    banksel outputStates
+    movwf   outputStates                ; store the switch state
+
+    ; test each output flag and set the output pin correspondingly
+
+    btfsc   outputStates,AC_OK_LED_FLAG
+    goto    turnACOKLEDOff
+
+    banksel INDICATORS_OUT_L
+    bcf     INDICATORS_OUT_L,AC_OK_LED  ; turn on
+    goto    soSkip1    
+
+turnACOKLEDOff:
+
+    banksel INDICATORS_OUT_L
+    bsf     INDICATORS_OUT_L,AC_OK_LED  ; turn off
+
+soSkip1:
+
+    banksel outputStates
+    btfsc   outputStates,BUZZER_FLAG
+    goto    turnBuzzerOff
+
+    banksel INDICATORS_OUT_L
+    bcf     INDICATORS_OUT_L,BUZZER     ; turn on
+    goto    soSkip2
+
+turnBuzzerOff:
+
+    banksel INDICATORS_OUT_L
+    bsf     INDICATORS_OUT_L,BUZZER     ; turn off
+
+soSkip2:
+
+    banksel outputStates
+    btfsc   outputStates,SHORT_LED_FLAG
+    goto    turnShortLEDOff
+
+    banksel INDICATORS_OUT_L
+    bcf     INDICATORS_OUT_L,SHORT_LED     ; turn on
+    goto    soExit
+
+turnShortLEDOff:
+
+    banksel INDICATORS_OUT_L
+    bsf     INDICATORS_OUT_L,SHORT_LED     ; turn off
+
+soExit:
 
     goto    resetSerialPortReceiveBuffer
 
