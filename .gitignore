@@ -14,13 +14,14 @@
 
 archive/
 Distributions/
-build/default/production/
+build/
 nbproject/Makefile-default.mk
 nbproject/Makefile-genesis.properties
 nbproject/configurations.xml
 nbproject/private/configurations.xml
 nbproject/private/private.xml
 nbproject/project.xml
+*.fil
 *.mch
 *.MCH
 *.o
