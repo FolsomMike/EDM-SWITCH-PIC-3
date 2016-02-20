@@ -694,10 +694,10 @@ trapSwitchInputs:
 
 setOutputs:
 
-    moviw   1[FSR0]                     ; get the switch state value from the packet
+    moviw   1[FSR0]                     ; get the output state value from the packet
 
     banksel outputStates
-    movwf   outputStates                ; store the switch state
+    movwf   outputStates                ; store the output states
 
     ; test each output flag and set the output pin correspondingly
 
