@@ -42,41 +42,41 @@
 ;
 ; Port A        Pin/Options/Selected Option/Description  (only the most common options are listed)
 ;
-; RA0   I/*,IOC,USB-D+                  ~ I ~ Jog Down switch input
-; RA1   I/*,IOC,USB-D-                  ~ unused -- pulled high externally
+; RA0   I/*,IOC,USB-D+                  ~ In ~ Jog Down switch input
+; RA1   I/*,IOC,USB-D-                  ~ In ~ unused -- pulled high externally
 ; RA2   not implemented in PIC16f1459   ~ 
 ; RA3   I/*,IOC,T1G,MSSP-SS,Vpp,MCLR    ~ Vpp
-; RA4   I/O,IOC,T1G,CLKOUT,CLKR, AN3    ~ unused -- no connection
-; RA5   I/O,IOC,T1CKI,CLKIN             ~ unused -- no connection
+; RA4   I/O,IOC,T1G,CLKOUT,CLKR, AN3    ~ Out ~ unused -- no connection
+; RA5   I/O,IOC,T1CKI,CLKIN             ~ Out ~ unused -- no connection
 ; RA6   not implemented in PIC16f1459
 ; RA7   not implemented in PIC16f1459
 ;
 ; On version 1.0, RA0 is connected to Serial_Data_To_Local_PICs and RB5 is connected to the
-; Jog Down switch. Those boards are modified with jumpers so that the EUSART RX on RB5 can be used
-; to read serial data. From version 1.1 forward, the boards are redesigned and do not need
-; modification.
+; Jog Down switch. Those boards are modified with jumpers to switch RA0 and RB5 so that the
+; EUSART RX on RB5 can be used to read serial data. From version 1.1 forward, the boards are
+; redesigned and do not need modification.
 ;
-; Port B        Pin/Options/Selected Option/Description  (only the most common options are listed)
+; Port B        Pin/Options/Selected Option/Description  (only the most common optins are listed)
 ;
 ; RB0   not implemented in PIC16f1459
 ; RB1   not implemented in PIC16f1459
 ; RB2   not implemented in PIC16f1459
 ; RB3   not implemented in PIC16f1459
-; RB4   I/O,IOC,MSSP-SDA/SDI,AN10       ~ I ~ I2CSDA, I2C bus data line
-; RB5   I/O,IOC,EUSART-RX/DX,AN11       ~ I ~ EUSART-RX, serial port data in
-; RB6   I/O,IOC,MSSP-SCL/SCK            ~ I ~ I2CSCL, I2C bus clock line
-; RB7   I/O,IOC,EUSART-TX/CK            ~ O ~ EUSART-TX, serial port data out
+; RB4   I/O,IOC,MSSP-SDA/SDI,AN10       ~ In ~ I2CSDA, I2C bus data line
+; RB5   I/O,IOC,EUSART-RX/DX,AN11       ~ In ~ EUSART-RX, serial port data in
+; RB6   I/O,IOC,MSSP-SCL/SCK            ~ In ~ I2CSCL, I2C bus clock line
+; RB7   I/O,IOC,EUSART-TX/CK            ~ Out ~ EUSART-TX, serial port data out
 ;
 ; Port C        Pin/Options/Selected Option/Description  (only the most common options are listed)
 ;
-; RC0   I/O,AN4,C1/2IN+,ICSPDAT,Vref    ~ O ~ ICSPDAT ~ in circuit programming data, AC OK LED 
-; RC1   I/O,AN5,C1/2IN1-,ICSPCLK,INT    ~ I ~ ICSPCLK ~ in circuit programming clock, Mode Switch
-; RC2   I/O,AN6,C1/2IN2-,DACOUT1        ~ I ~ Jog Up Switch
-; RC3   I/O,AN7,C1/2IN3-,DACOUT2,CLKR   ~ O ~ Buzzer 
-; RC4   I/O,C1/2OUT                     ~ I ~ Electrode Power Switch 
-; RC5   I/O,T0CKI,PWM1                  ~ I ~ unused -- no connection
-; RC6   I/O,AN8,PWM2,MSSP-SS            ~ I ~ Short Condition LED
-; RC7   I/O,AN9,MSSP-SDO                ~ I ~ Select switch
+; RC0   I/O,AN4,C1/2IN+,ICSPDAT,Vref    ~ Out ~ ICSPDAT ~ in circuit programming data, AC OK LED 
+; RC1   I/O,AN5,C1/2IN1-,ICSPCLK,INT    ~ In ~ ICSPCLK ~ in circuit programming clock, Mode Switch
+; RC2   I/O,AN6,C1/2IN2-,DACOUT1        ~ In ~ Jog Up Switch
+; RC3   I/O,AN7,C1/2IN3-,DACOUT2,CLKR   ~ Out ~ Buzzer 
+; RC4   I/O,C1/2OUT                     ~ In ~ Electrode Power Switch 
+; RC5   I/O,T0CKI,PWM1                  ~ Out ~ unused -- no connection
+; RC6   I/O,AN8,PWM2,MSSP-SS            ~ Out ~ Short Condition LED
+; RC7   I/O,AN9,MSSP-SDO                ~ In ~ Select switch
 ;
 ;end of Hardware Control Description
 ;--------------------------------------------------------------------------------------------------
@@ -207,7 +207,7 @@ SERIAL_PACKET_READY EQU 3
 ; bits in statusFlags variable
 
 SERIAL_COM_ERROR    EQU 0
-I2c_COM_ERROR       EQU 1
+I2C_COM_ERROR       EQU 1
 
 SERIAL_RCV_BUF_LEN  EQU .10
 
@@ -221,6 +221,7 @@ SET_OUTPUTS_CMD             EQU .2
 SWITCH_STATES_CMD           EQU .3
 LCD_DATA_CMD                EQU .4
 LCD_INSTRUCTION_CMD         EQU .5
+LCD_BLOCK_CMD               EQU .6
 
 ; end of Software Definitions
 ;--------------------------------------------------------------------------------------------------
@@ -494,7 +495,10 @@ setupPortA:
 
     ; set direction for each pin used
 
-    bsf     TRISA, JOG_DOWN_SW            ; input
+    bsf     TRISA, JOG_DOWN_SW          ; input
+
+    bcf     TRISA, RA4                  ; set unconnected pin to output to avoid floating
+    bcf     TRISA, RA5                  ; set unconnected pin to output to avoid floating
 
     return
 
@@ -573,11 +577,14 @@ setupPortC:
     ;preset outputs before enabling
 
     banksel INDICATORS_OUT_L
+
     bsf     INDICATORS_OUT_L,AC_OK_LED  ; turn off LED
     bsf     INDICATORS_OUT_L,BUZZER     ; turn off buzzer
     bsf     INDICATORS_OUT_L,SHORT_LED  ; turn off LED
 
     ; set direction for each pin used
+
+    banksel TRISC
 
     bsf     TRISC, MODE_SW              ; input
     bsf     TRISC, JOG_UP_SW            ; input
@@ -587,6 +594,8 @@ setupPortC:
     bcf     TRISC, AC_OK_LED            ; output
     bcf     TRISC, BUZZER               ; output
     bcf     TRISC, SHORT_LED            ; output
+
+    bcf     TRISC, RC5                  ; set unconnected pin to output to avoid floating
 
     return
 
@@ -920,7 +929,7 @@ parseCommandFromSerialPacket:
 ;
 ; On Exit:
 ;
-; serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
 ;
 
 setUpSerialXmtBuffer:
@@ -943,6 +952,12 @@ setUpSerialXmtBuffer:
 
     movf    usartScratch1,W                 ; store command byte
     movwi   FSR0++
+
+    banksel serialXmtBufPtrH                ; point serialXmtBufPtrH:L at next buffer position
+    movf    FSR0H,W
+    movwf   serialXmtBufPtrH
+    movf    FSR0L,W
+    movwf   serialXmtBufPtrL
 
     return
 
@@ -1066,6 +1081,7 @@ setupSerialPort:
 
     banksel PIE1
     bsf     PIE1, RCIE      ; enable receive interrupts
+    bcf     PIE1, TXIE      ; disable transmit interrupts (re-enabled when data is ready to xmt)
 
     return
 
@@ -1145,7 +1161,7 @@ resetSerialPortTransmitBuffer:
     clrf    serialXmtBufNumBytes
     movlw   high serialXmtBuf
     movwf   serialXmtBufPtrH
-    movlw   serialXmtBuf
+    movlw   low serialXmtBuf
     movwf   serialXmtBufPtrL
 
     return
@@ -1178,7 +1194,7 @@ calcAndStoreCheckSumSerPrtXmtBuf:
     movwf   FSR0L
 
     addfsr  FSR0,.3                             ; skip 2 header bytes and 1 length byte
-
+                                                ; command byte is part of checksum
     goto    calculateAndStoreCheckSum
 
 ; end calcAndStoreCheckSumSerPrtXmtBuf
