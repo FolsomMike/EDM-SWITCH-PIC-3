@@ -292,15 +292,22 @@ LCD_BLOCK_CMD               EQU .6
     serialPortErrorCnt      ; number of com errors from Rabbit via serial port
     slaveI2CErrorCnt        ; number of com errors from Slave PICs via I2C bus
 
+    serialRcvPktLenMain     ; used by main to process completed packets
+    serialRcvPktCntMain     ; used by main to process completed packets
+    
     usartScratch0
     usartScratch1
     serialIntScratch0
+ 
+    ; used by serial receive interrupt    
     
     serialRcvPktLen
     serialRcvPktCnt
     serialRcvBufPtrH
     serialRcvBufPtrL
     serialRcvBufLen
+    
+    ; used by serial transmit interrupt    
     
     serialXmtBufNumBytes
     serialXmtBufPtrH
@@ -377,12 +384,13 @@ SERIAL_XMT_BUF_LINEAR_LOC_L     EQU low SERIAL_XMT_BUF_LINEAR_ADDRESS
 
 
 ; interrupt vector at 0x0004
-; NOTE: You must clear PCLATH before jumping to the interrupt routine - if PCLATH has bits set it
-; will cause a jump into an unexpected program memory bank.
 
-    clrf    PCLATH          ; set to bank 0 where the ISR is located
-    goto 	handleInterrupt	; points to interrupt service routine
-
+; NOTE: You must set PCLATH before jumping to the interrupt routine - if PCLATH is wrong the
+; jump will fail.
+ 
+    movlp   high handleInterrupt
+    goto    handleInterrupt	; points to interrupt service routine
+    
 ; end of Power On and Reset Vectors
 ;--------------------------------------------------------------------------------------------------
 
@@ -714,12 +722,12 @@ trapSwitchInputs:
 ;
 ; On Entry:
 ;
-;   FSR0 points to serialRcvBuf
+;   FSR1 points to serialRcvBuf
 ; 
 
 setOutputs:
 
-    moviw   1[FSR0]                     ; get the output state value from the packet
+    moviw   1[FSR1]                     ; get the output state value from the packet
 
     banksel outputStates
     movwf   outputStates                ; store the output states
@@ -770,7 +778,7 @@ turnShortLEDOff:
 
 soExit:
 
-    goto    resetSerialPortRcvBuf
+    return
 
 ; end of setOutputs
 ;--------------------------------------------------------------------------------------------------
@@ -834,12 +842,20 @@ sendSwitchStates:
 
 handleSerialPacket:
 
+    banksel serialRcvPktLen
+
+    movf    serialRcvPktLen,W           ; store the packet length variable so the receive interrupt
+    movwf   serialRcvPktLenMain         ; can overwrite it if a new packet arrives
+        
+    call    resetSerialPortRcvBuf       ; allow the serial receive interrupt to start a new packet
+                                        ; see "Serial Data Timing" notes at the top of this page
+    
     ;verify the checksum
 
-    banksel flags2
-
-    movf    serialRcvPktLen, W          ; copy number of bytes to variable for counting
-    movwf   serialRcvPktCnt
+    banksel serialRcvPktLenMain
+  
+    movf    serialRcvPktLenMain, W      ; copy number of bytes to variable for counting
+    movwf   serialRcvPktCntMain
 
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_H ; point FSR0 at start of receive buffer
     movwf   FSR0H
@@ -852,7 +868,7 @@ hspSumLoop:
 
     addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
     incf    FSR0L, F
-    decfsz  serialRcvPktCnt, F
+    decfsz  serialRcvPktCntMain, F
     goto    hspSumLoop
 
     movf    WREG, F                         ; test for zero
@@ -864,7 +880,7 @@ hspError:
     incf    serialPortErrorCnt, F           ; track errors
     bsf     statusFlags,SERIAL_COM_ERROR
 
-    goto    resetSerialPortRcvBuf
+    return
 
 ; end of handleSerialPacket
 ;--------------------------------------------------------------------------------------------------
@@ -878,29 +894,29 @@ hspError:
 ;
 ; On Exit:
 ;
-; FSR0 points to serialRcvBuf
+; FSR1 points to serialRcvBuf
 ;
 
 parseCommandFromSerialPacket:
 
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_H         ; point FSR0 at start of receive buffer
-    movwf   FSR0H
+    movwf   FSR1H
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
-    movwf   FSR0L
+    movwf   FSR1L
 
 ; parse the command byte by comparing with each command
 
-    movf    INDF0, W
+    movf    INDF1, W
     sublw   SET_OUTPUTS_CMD
     btfsc   STATUS,Z
     goto    setOutputs
 
-;    movf    INDF0, W
+;    movf    INDF1, W
 ;    sublw   ???_CMD
 ;    btfsc   STATUS,Z
 ;    goto    handleSetPotRbtCmd
 
-    goto    resetSerialPortRcvBuf
+    return
 
 ; end of parseCommandFromSerialPacket
 ;--------------------------------------------------------------------------------------------------
@@ -1188,9 +1204,13 @@ resetSerialPortRcvBuf:
 
     bcf     RCSTA, CREN     ; clear error by disabling/enabling receiver
     bsf     RCSTA, CREN
-
+        
 RSPRBnoOERRError:
 
+    banksel RCREG           ; clear any pending interrupt by clearing both bytes of the buffer
+    movf    RCREG, W
+    movf    RCREG, W
+        
     return
 
 ; end of resetSerialPortRcvBuf
@@ -1334,14 +1354,19 @@ handleInterrupt:
 
                                     ; INTCON is a core register, no need to banksel
 	btfsc 	INTCON, T0IF     		; Timer0 overflow interrupt?
-	goto 	handleTimer0Int
+	call 	handleTimer0Int         ; call so the serial port interrupts will get checked
+                                    ;  if not, the timer interrupt can block them totally
 
     banksel PIR1
-
-    btfsc   PIR1, RCIF              ; serial port receive interrupt?
+    btfsc   PIR1, RCIF              ; serial port receive interrupt
     goto    handleSerialPortReceiveInt
 
-    btfsc   PIR1, TXIF              ; serial port transmit interrupt?
+    banksel PIE1                    ; only handle UART xmt interrupt if enabled
+    btfss   PIE1, TXIE              ;  the TXIF flag is always set whenever the buffer is empty
+    retfie                          ;  and should be ignored unless the interrupt is enabled
+    
+    banksel PIR1
+    btfsc   PIR1, TXIF              ; serial port transmit interrupt
     goto    handleSerialPortTransmitInt
 
 
@@ -1378,7 +1403,7 @@ handleTimer0Int:
 
     ; do stuff here
     
-    goto    endISR    
+    return
 
 ; end of handleTimer0Int
 ;--------------------------------------------------------------------------------------------------
