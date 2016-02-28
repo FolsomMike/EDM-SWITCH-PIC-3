@@ -640,8 +640,10 @@ mainLoop:
 
     call    sendDataIfReady     ; send the switch inputs if serial transmit buffer is empty
 
+    movlp   high handleReceivedDataIfPresent
     call    handleReceivedDataIfPresent ; process received packet if available
-
+    movlp   high mainLoop
+    
     goto    mainLoop
 
 ; end of Main Code
@@ -663,23 +665,6 @@ sendDataIfReady:
     return
 
 ; end of sendDataIfReady
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
-; handleReceivedDataIfPresent
-;
-; Processes data in the serial receive buffer if a packet has been received.
-;
-
-handleReceivedDataIfPresent:
-
-    banksel flags2                          ; handle packet in serial receive buffer if ready
-    btfsc   flags2, SERIAL_PACKET_READY
-    goto    handleSerialPacket
-
-    return
-
-; end of handleReceivedDataIfPresent
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
@@ -835,57 +820,6 @@ sendSwitchStates:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; handleSerialPacket
-;
-; Processes a packet in the serial receive buffer.
-;
-
-handleSerialPacket:
-
-    banksel serialRcvPktLen
-
-    movf    serialRcvPktLen,W           ; store the packet length variable so the receive interrupt
-    movwf   serialRcvPktLenMain         ; can overwrite it if a new packet arrives
-        
-    call    resetSerialPortRcvBuf       ; allow the serial receive interrupt to start a new packet
-                                        ; see "Serial Data Timing" notes at the top of this page
-    
-    ;verify the checksum
-
-    banksel serialRcvPktLenMain
-  
-    movf    serialRcvPktLenMain, W      ; copy number of bytes to variable for counting
-    movwf   serialRcvPktCntMain
-
-    movlw   SERIAL_RCV_BUF_LINEAR_LOC_H ; point FSR0 at start of receive buffer
-    movwf   FSR0H
-    movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
-    movwf   FSR0L
-
-    clrw                                ; preload W with zero
-
-hspSumLoop:
-
-    addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
-    incf    FSR0L, F
-    decfsz  serialRcvPktCntMain, F
-    goto    hspSumLoop
-
-    movf    WREG, F                         ; test for zero
-    btfsc   STATUS, Z                       ; error if not zero
-    goto    parseCommandFromSerialPacket    ; checksum good so handle command
-
-hspError:
-
-    incf    serialPortErrorCnt, F           ; track errors
-    bsf     statusFlags,SERIAL_COM_ERROR
-
-    return
-
-; end of handleSerialPacket
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; parseCommandFromSerialPacket
 ;
 ; Parses the command byte in a serial packet and performs the appropriate action.
@@ -1000,6 +934,74 @@ setUpSerialXmtBuf:
 ; end of setUpSerialXmtBuf
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; handleReceivedDataIfPresent
+;
+; Processes data in the serial receive buffer if a packet has been received.
+;
+
+handleReceivedDataIfPresent:
+
+    banksel flags2                          ; handle packet in serial receive buffer if ready
+    btfsc   flags2, SERIAL_PACKET_READY
+    goto    handleSerialPacket
+
+    return
+
+; end of handleReceivedDataIfPresent
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; handleSerialPacket
+;
+; Processes a packet in the serial receive buffer.
+;
+
+handleSerialPacket:
+
+    banksel serialRcvPktLen
+
+    movf    serialRcvPktLen,W           ; store the packet length variable so the receive interrupt
+    movwf   serialRcvPktLenMain         ; can overwrite it if a new packet arrives
+        
+    call    resetSerialPortRcvBuf       ; allow the serial receive interrupt to start a new packet
+                                        ; see "Serial Data Timing" notes at the top of this page
+    
+    ;verify the checksum
+
+    banksel serialRcvPktLenMain
+  
+    movf    serialRcvPktLenMain, W      ; copy number of bytes to variable for counting
+    movwf   serialRcvPktCntMain
+
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_H ; point FSR0 at start of receive buffer
+    movwf   FSR0H
+    movlw   SERIAL_RCV_BUF_LINEAR_LOC_L
+    movwf   FSR0L
+
+    clrw                                ; preload W with zero
+
+hspSumLoop:
+
+    addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
+    incf    FSR0L, F
+    decfsz  serialRcvPktCntMain, F
+    goto    hspSumLoop
+
+    movf    WREG, F                         ; test for zero
+    btfsc   STATUS, Z                       ; error if not zero
+    goto    parseCommandFromSerialPacket    ; checksum good so handle command
+
+hspError:
+
+    incf    serialPortErrorCnt, F           ; track errors
+    bsf     statusFlags,SERIAL_COM_ERROR
+
+    return
+
+; end of handleSerialPacket
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ; startSerialPortTransmit
 ;
