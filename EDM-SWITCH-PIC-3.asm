@@ -984,7 +984,7 @@ handleSerialPacket:
 hspSumLoop:
 
     addwf   INDF0, W                    ; sum each data byte and the checksum byte at the end
-    incf    FSR0L, F
+    addfsr  FSR0,1
     decfsz  serialRcvPktCntMain, F
     goto    hspSumLoop
 
@@ -1109,17 +1109,27 @@ setupSerialPort:
     clrf    serialPortErrorCnt
     bcf     statusFlags,SERIAL_COM_ERROR
 
-    ;set the baud rate to 57,600 (will actually be 57.97K with 0.64% error)
+    ;to set the baud rate to 57,600 (will actually be 57.97K with 0.64% error)
     ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 68
 
+    ;to set the baud rate to 19,200 (will actually be 19.23K with 0.16% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 207
+
+    ;to set the baud rate to 9,600 (will actually be 9592 with 0.08% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 416 (0x1a0)
+    
+    ;to set the baud rate to 2,400 (will actually be 2399.5 with 0.02% error)
+    ;for Fosc of 16 Mhz: SYNC = 0, BRGH = 1, BRG16 = 1, SPBRG = 1666 (0x682)
+    
     banksel TXSTA
     bsf     TXSTA, BRGH
     banksel BAUDCON
     bsf     BAUDCON, BRG16
     banksel SPBRGH
-    clrf    SPBRGH
+    movlw   0x01
+    movwf   SPBRGH
     banksel SPBRGL
-    movlw   .68
+    movlw   0xa0
     movwf   SPBRGL
 
     ;set UART mode and enable receiver and transmitter
