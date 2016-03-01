@@ -179,16 +179,6 @@ JOG_DOWN_SW_FLAG        EQU     4
 AC_OK_LED_FLAG          EQU     0
 BUZZER_FLAG             EQU     1
 SHORT_LED_FLAG          EQU     2
-     
-; bits in xmtBufferFlags
-
-xmtBusy         EQU     0x00    ; bit 0: 0 = buffer not busy        1 = buffer busy
-startBit        EQU     0x01    ; bit 1: 0 = start bit not due      1 = transmit start bit next
-stopBit         EQU     0x02    ; bit 2: 0 = stop bit not due       1 = transmit stop bit next
-endBuffer       EQU     0x03    ; bit 3: 0 = not buffer end         1 = buffer end reached
-inDelay         EQU     0x04    ; bit 4: 0 = not delaying           1 = delaying
-
-; end of bits in xmtBufferFlags
 
 ; end of Constants
 ;--------------------------------------------------------------------------------------------------
@@ -314,6 +304,12 @@ LCD_BLOCK_CMD               EQU .6
     serialXmtBufPtrL
     serialXmtBufLen
 
+    ; variables for general use
+    
+    scratch0
+    scratch1
+    scratch2
+    
     endc 
     
 ; end of Bank 0
@@ -783,35 +779,17 @@ soExit:
 
 sendSwitchStates:
 
-    movlw   .3                          ; setup serial port xmt buffer for proper number of bytes
-    movwf   usartScratch0               ;  (1 command byte, 1 data byte, 1 checksum)
-
-    movlw   SWITCH_STATES_CMD           ; command byte for the xmt packet
-    movwf   usartScratch1
-
-    call    setUpSerialXmtBuf
-
+    call    setupSwitchStatesPacket    
+    
     banksel switchStates
     movf    switchStates,W
-    movwi   FSR0++
-
-    banksel serialXmtBufPtrH            ; store updated pointer
-    movf    FSR0H,W
-    movwf   serialXmtBufPtrH
-    movf    FSR0L,W
-    movwf   serialXmtBufPtrL
+    
+    call    writeByteToSerialXmtBuf    
 
     banksel switchStates
-    movlw   0xff                        ; initialize switchStates -> no inputs active
+    movlw   0xff                        ; reset switchStates -> no inputs active
     movwf   switchStates
-
-    movlw   .2                          ; number of data bytes in packet which are checksummed
-    movwf   usartScratch0               ; (command byte, 1 data byte)
-    call    calcAndStoreCheckSumSerPrtXmtBuf
-
-    movlw   .6                          ; number of bytes to transmit
-                                        ; (add three to account for 2 header bytes, 1 length byte)
-
+    
     call    startSerialPortTransmit
 
     return
@@ -819,6 +797,37 @@ sendSwitchStates:
 ; end of sendSwitchStates
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; setupSwitchStatesPacket
+;
+; Prepares the serial transmit buffer with header, length byte of 3, and command SWITCH_STATES_CMD.
+; The data to be sent can then be added to the packet.
+;
+; Before the packet is transmitted, the length byte should be replaced with the actual number of
+; bytes which have been added to the packet.
+;
+; On Entry:
+;
+; On Exit:
+;
+; packet is stuffed with header, length value of 3, and command byte
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+
+setupSwitchStatesPacket:
+
+    movlw   SWITCH_STATES_CMD           ; packet command byte
+    
+    movlp   high setupSerialXmtPkt
+    call    setupSerialXmtPkt
+    movlp   high setupSwitchStatesPacket
+
+    banksel flags
+
+    return
+
+; end of setupSwitchStatesPacket
+;--------------------------------------------------------------------------------------------------
+        
 ;--------------------------------------------------------------------------------------------------
 ; parseCommandFromSerialPacket
 ;
@@ -855,6 +864,83 @@ parseCommandFromSerialPacket:
 ; end of parseCommandFromSerialPacket
 ;--------------------------------------------------------------------------------------------------
 
+;--------------------------------------------------------------------------------------------------
+; setupSerialXmtPkt
+;
+; Prepares the serial transmit buffer with header, a length byte of 3 and the command byte. The
+; data to be sent can then be added to the packet.
+;
+; The default length of 3 is useful for many LCD commands which require 2 data bytes and a
+; checksum. The length can be adjusted before transmission.
+;
+; On Entry:
+;
+; W contains the packet command.
+;
+; On Exit:
+;
+; packet is stuffed with header, command, and length value of 3.
+; FSR0 and serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
+;
+
+setupSerialXmtPkt:
+
+    banksel usartScratch0
+
+    movwf   usartScratch1       ; store the command byte
+    
+    movlw   .3
+    movwf   usartScratch0       ; default number of data bytes plus checksum byte
+                                ;       can be changed before transmission
+
+    goto    setUpSerialXmtBuf
+
+; end of setupSerialXmtPkt
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
+; writeByteToSerialXmtBuf
+;
+; This subroutine writes the byte in W to the serial transmit buffer.
+;
+; On entry:
+; 
+; W contains byte to write
+;
+; NOTE: The data is placed in the buffer but is not submitted to be sent.  After using this
+; function, call startSerialPortTransmit or printString to initiate transmission.
+;
+
+writeByteToSerialXmtBuf:
+
+    banksel scratch2
+    movwf   scratch2                        ; store character
+
+    banksel serialXmtBufPtrH                ; load FSR0 with buffer pointer
+    movf    serialXmtBufPtrH, W
+    movwf   FSR0H
+    movf    serialXmtBufPtrL, W
+    movwf   FSR0L
+
+    movf    scratch2,W                      ; retrieve character
+
+    movwf   INDF0                           ; store character in buffer
+
+    banksel serialXmtBufNumBytes            ; increment packet byte count
+    incf    serialXmtBufNumBytes,f
+
+    banksel serialXmtBufPtrH
+    incf    serialXmtBufPtrL,F              ; point to next buffer position
+    btfsc   STATUS,Z
+    incf    serialXmtBufPtrH,F
+    
+    banksel flags
+
+    return    
+ 
+; end of writeByteToSerialXmtBuf
+;--------------------------------------------------------------------------------------------------
+    
 ;--------------------------------------------------------------------------------------------------
 ;--------------------------------------------------------------------------------------------------
 ;   EUSART Serial Port Core Functions
