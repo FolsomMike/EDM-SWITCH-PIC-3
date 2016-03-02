@@ -170,9 +170,10 @@ JOG_DOWN_SW             EQU     RA0
 
 MODE_SW_FLAG            EQU     0
 JOG_UP_SW_FLAG          EQU     1
-SELECT_SW_FLAG          EQU     2
-ELECTRODE_PWR_SW_FLAG   EQU     3
-JOG_DOWN_SW_FLAG        EQU     4
+JOG_DOWN_SW_FLAG        EQU     2          
+SELECT_SW_FLAG          EQU     3
+ELECTRODE_PWR_SW_FLAG   EQU     4
+AC_OK_FLAG              EQU     5
 
 ;bits in outputStates variable
 
@@ -715,7 +716,7 @@ setOutputs:
 
     ; test each output flag and set the output pin correspondingly
 
-    btfsc   outputStates,AC_OK_LED_FLAG
+    btfss   outputStates,AC_OK_LED_FLAG ; high turns on the LED using a low output
     goto    turnACOKLEDOff
 
     banksel INDICATORS_OUT_L
@@ -773,8 +774,6 @@ soExit:
 ; On Entry:
 ;
 ; On Exit:
-;
-; serialXmtBufPtrH:serialXmtBufPtrL will point to the location for the next data byte
 ;
 
 sendSwitchStates:
