@@ -88,6 +88,20 @@
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
+; Defines
+;
+    
+; COMMENT OUT "#define DEBUG_MODE" line before using code in system.
+; Defining DEBUG_MODE will insert code which simplifies simulation by skipping code which waits on
+; stimulus and performing various other actions which make the simulation run properly.
+; Search for "DEBUG_MODE" to find all examples of such code.
+
+;#define DEBUG_MODE 1     ; set DEBUG_MODE testing "on" ;//debug mks -- comment this out later
+    
+; end of Defines
+;--------------------------------------------------------------------------------------------------
+    
+;--------------------------------------------------------------------------------------------------
 ; Configurations, etc. for the Assembler Tools and the PIC
 
     LIST p = PIC16F1459	;select the processor
@@ -716,7 +730,7 @@ setOutputs:
 
     ; test each output flag and set the output pin correspondingly
 
-    btfss   outputStates,AC_OK_LED_FLAG ; high turns on the LED using a low output
+    btfsc  outputStates,AC_OK_LED_FLAG
     goto    turnACOKLEDOff
 
     banksel INDICATORS_OUT_L
@@ -732,13 +746,13 @@ soSkip1:
 
     banksel outputStates
     btfsc   outputStates,BUZZER_FLAG
-    goto    turnBuzzerOff
+    goto    buzzerOff
 
     banksel INDICATORS_OUT_L
     bcf     INDICATORS_OUT_L,BUZZER     ; turn on
     goto    soSkip2
 
-turnBuzzerOff:
+buzzerOff:
 
     banksel INDICATORS_OUT_L
     bsf     INDICATORS_OUT_L,BUZZER     ; turn off
@@ -1258,7 +1272,7 @@ setupSerialPort:
 
 waitForTXIFHigh:
 
-    ifdef debug_on    ; if debugging, don't wait for interrupt to be set high as the MSSP is not
+    ifdef DEBUG_MODE  ; if debugging, don't wait for interrupt to be set high as the MSSP is not
     return            ; simulated by the IDE
     endif
 
@@ -1283,11 +1297,6 @@ resetSerialPortRcvBuf:
 
     banksel flags2
 
-    bcf     flags2, HEADER_BYTE_1_RCVD
-    bcf     flags2, HEADER_BYTE_2_RCVD
-    bcf     flags2, LENGTH_BYTE_VALID
-    bcf     flags2, SERIAL_PACKET_READY
-
     clrf    serialRcvPktLen
     clrf    serialRcvPktCnt
     movlw   SERIAL_RCV_BUF_LINEAR_LOC_H
@@ -1307,7 +1316,14 @@ RSPRBnoOERRError:
     banksel RCREG           ; clear any pending interrupt by clearing both bytes of the buffer
     movf    RCREG, W
     movf    RCREG, W
-        
+    
+    banksel flags2
+
+    bcf     flags2, HEADER_BYTE_1_RCVD
+    bcf     flags2, HEADER_BYTE_2_RCVD
+    bcf     flags2, LENGTH_BYTE_VALID
+    bcf     flags2, SERIAL_PACKET_READY
+    
     return
 
 ; end of resetSerialPortRcvBuf
