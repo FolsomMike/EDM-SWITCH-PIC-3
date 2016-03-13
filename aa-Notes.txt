@@ -1,0 +1,5 @@
+03_EDM-Switch-PIC-3
+
+This file is for use on Model III setups which have a PIC on the User Interface board to read switches and drive outputs.
+
+It uses the EUSART to communicate serial data to and from the Main PIC.
