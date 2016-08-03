@@ -97,7 +97,9 @@
 ; Search for "DEBUG_MODE" to find all examples of such code.
 
 ;#define DEBUG_MODE 1     ; set DEBUG_MODE testing "on" ;//debug mks -- comment this out later
-    
+
+JOG_DEGLITCH_CNT0 EQU    .255
+
 ; end of Defines
 ;--------------------------------------------------------------------------------------------------
     
@@ -290,6 +292,8 @@ LCD_BLOCK_CMD               EQU .6
                             ; bit 5:
 							; bit 6:
 							; bit 7:
+
+    deGlitchCntr0           ; counter used to ignore noise spikes on switch lines
 
 	smallDelayCnt			; used to count down for small delay
 	bigDelayCnt				; used to count down for big delay
@@ -692,8 +696,9 @@ trapSwitchInputs:
     btfss   MODE_JOGUP_SEL_EPWR_P,MODE_SW
     bcf     switchStates,MODE_SW_FLAG
 
-    btfss   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW
-    bcf     switchStates,JOG_UP_SW_FLAG
+    call    trapJogUp
+
+    call    trapJogDown
 
     btfss   MODE_JOGUP_SEL_EPWR_P,SELECT_SW
     bcf     switchStates,SELECT_SW_FLAG
@@ -701,14 +706,71 @@ trapSwitchInputs:
     btfss   MODE_JOGUP_SEL_EPWR_P,ELECTRODE_PWR_SW
     bcf     switchStates,ELECTRODE_PWR_SW_FLAG
 
-    banksel JOGDWN_P
+    return
+
+; end of trapSwitchInputs
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; trapJogUp
+;
+; Checks Jog Up switch input and sets the associated flag if it is active.
+; Uses a deglitch timer to ignore noise spikes.
+;
+
+trapJogUp:
+
+    btfsc   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW     ; do nothing if switch not active
+    return
+
+    movlw   JOG_DEGLITCH_CNT0                   ; load deglitch counter
+    movwf   deGlitchCntr0
+
+tJU1:
+
+    btfsc   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW     ; do nothing if switch not active
+    return
+
+    decfsz  deGlitchCntr0,F
+    goto    tJU1
+
+    btfss   MODE_JOGUP_SEL_EPWR_P,JOG_UP_SW
+    bcf     switchStates,JOG_UP_SW_FLAG
+
+    return
+
+; end of trapJogUp
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; trapJogDown
+;
+; Checks Jog Down switch input and sets the associated flag if it is active.
+; Uses a deglitch timer to ignore noise spikes.
+;
+
+trapJogDown:
+
+    btfsc   JOGDWN_P,JOG_DOWN_SW                ; do nothing if switch not active
+    return
+
+    movlw   JOG_DEGLITCH_CNT0                   ; load deglitch counter
+    movwf   deGlitchCntr0
+
+tJD1:
+
+    btfsc   JOGDWN_P,JOG_DOWN_SW                ; do nothing if switch not active
+    return
+
+    decfsz  deGlitchCntr0,F
+    goto    tJD1
 
     btfss   JOGDWN_P,JOG_DOWN_SW
     bcf     switchStates,JOG_DOWN_SW_FLAG
 
     return
 
-; end of trapSwitchInputs
+; end of trapJogDown
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
